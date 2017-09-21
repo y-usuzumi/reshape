@@ -1,12 +1,15 @@
 module Language.Reshape.Parser where
 
+import           Control.Monad
 import           Data.Char
 import           Data.Either.Unwrap
 import           Data.Functor            (fmap)
 import           Data.List
 import           Data.String.Interpolate
+import           Debug.Trace
 import           Language.Reshape.AST
 import           Text.Parsec
+import           Text.Printf
 
 type Parser t = forall s u m. Stream s m Char => ParsecT s u m t
 
@@ -21,7 +24,7 @@ negativeInteger :: Parser Integer
 negativeInteger = char '-' *> positiveInteger >>= return . negate
 
 int :: Parser Integer
-int = positiveInteger <|> negativeInteger
+int = try $ positiveInteger <|> negativeInteger
 
 -- TODO
 float :: Parser Double
@@ -49,8 +52,14 @@ str = do
 ident :: Parser String
 ident = do
   l <- char '_' <|> letter
-  r <- many1 $ char '_' <|> alphaNum
+  r <- many $ char '_' <|> alphaNum
   return (l:r)
+
+inlineSpaces :: Parser ()
+inlineSpaces = skipMany (oneOf " \t")
+
+inlineSpaces1 :: Parser ()
+inlineSpaces1 = skipMany1 (oneOf " \t")
 
 ----------
 -- Literal
@@ -71,30 +80,42 @@ rvList = VList <$> between (char '[') (char ']') (rvExpr `sepBy` (char ','))
 
 rvSource :: Parser Literal
 rvSource = do
-  string "<#"
+  try $ string "<#"
+  inlineSpaces
   identifier <- ident
-  path <- manyTill anyChar (try (char '>'))
-  char '>'
+  char ':'
+  inlineSpaces
+  path <- manyTill anyChar (try (inlineSpaces *> (string "#>")))
   return $ VSource identifier path
 
 rvQuery :: Parser Literal
 rvQuery = do
-  string "</"
-  -- FIXME: should be better than ident
-  q <- manyTill anyChar (try (char '>'))
-  char '>'
+  try $ string "<?"
+  inlineSpaces
+  q <- manyTill anyChar (try (inlineSpaces *> (string "?>")))
   return $ VQuery $ Query q
 
 rvInfixOp :: Parser Literal
-rvInfixOp = VInfixOp <$> many1 (oneOf "!@#$%^&*-+=|./?")
+rvInfixOp = let  in do
+  notFollowedBy $ excludedOp "="
+  notFollowedBy $ excludedOp "<#"
+  notFollowedBy $ excludedOp "#>"
+  notFollowedBy $ excludedOp "<?"
+  notFollowedBy $ excludedOp "?>"
+  notFollowedBy $ excludedOp ":="
+  VInfixOp <$> many1 (oneOf "!@#$%^&*-+=|./?:<>")
+  where
+    opChars = "!@#$%^&*-+=|./?:<>"
+    excludedOp s = string s >> notFollowedBy (oneOf opChars)
 
 rvLiteral :: Parser Literal
-rvLiteral = rvInteger
-  <|> rvFloat
+rvLiteral = (rvInteger
+  -- <|> rvFloat
   <|> rvString
   <|> rvList
+  <|> rvInfixOp
   <|> rvSource
-  <|> rvQuery
+  <|> rvQuery)
 
 -------
 -- Expr
@@ -108,35 +129,35 @@ rvVar = EVar <$> ident
 
 rvAppCall :: Parser Expr
 rvAppCall = do
-  l <- rvExpr
-  many1 $ oneOf " \t"
-  r <- rvExpr
-  return $ EApp l r
-
-rvAppInfix :: Parser Expr
-rvAppInfix = do
-  l <- rvExpr
-  spaces
-  i <- rvInfixOp
-  spaces
-  r <- rvExpr
-  return $ EApp (ELiteral i) l `EApp` r
+  l <- rvAtomExpr
+  ls <- many1 (try (inlineSpaces1 *> rvAtomExpr))
+  (foldl1 EApp) <$> (foldApp (l:ls))
+  where
+    foldApp :: [Expr] -> Parser [Expr]
+    foldApp [] = return []
+    foldApp (a:[]) = return [a]
+    foldApp (op@(ELiteral (VInfixOp _)):a:s) = foldApp $ (EApp op a):s
+    foldApp (a:op@(ELiteral (VInfixOp opS)):[]) = unexpected (printf "Op %s is missing operand(s)" opS)
+    foldApp (a:op@(ELiteral (VInfixOp _)):c:s) = foldApp $ (EApp (EApp op a) c):s
+    foldApp (a:b:s) = foldApp $ (EApp a b):s
 
 rvEnclosed :: Parser Expr
 rvEnclosed = do
-  char '('
+  try $ char '('
   spaces
   expr <- rvExpr
   spaces
   char ')'
   return expr
 
-rvExpr :: Parser Expr
-rvExpr = rvEnclosed
-  <|> rvAppInfix
-  <|> rvAppCall
-  <|> rvVar
+rvAtomExpr :: Parser Expr
+rvAtomExpr = rvEnclosed
   <|> rvELiteral
+  <|> rvVar
+
+rvExpr :: Parser Expr
+rvExpr = try rvAppCall
+  <|> rvAtomExpr
 
 -------
 -- Stmt
@@ -144,20 +165,30 @@ rvExpr = rvEnclosed
 
 rvBind :: Parser Stmt
 rvBind = do
-  string "let"
-  many1 space
+  try $ string "let"
+  inlineSpaces1
   binding <- ident
-  spaces
+  inlineSpaces
   char '='
-  spaces
-  expr <- rvExpr
+  inlineSpaces
+  expr <- rvELiteral
   return $ SLet binding expr
 
+rvWrite :: Parser Stmt
+rvWrite = do
+  writee <- rvExpr
+  inlineSpaces
+  string ":="
+  inlineSpaces
+  writer <- rvExpr
+  return $ SWrite writee writer
+
 rvAppStmt :: Parser Stmt
-rvAppStmt = SApp <$> rvAppCall
+rvAppStmt = SApp <$> rvExpr
 
 rvStmt :: Parser Stmt
 rvStmt = rvBind
+  <|> try rvWrite
   <|> rvAppStmt
 
 
@@ -167,13 +198,33 @@ rvStmt = rvBind
 
 rvProgram :: Parser Program
 rvProgram = do
-  many endOfLine
-  stmts <- (rvStmt <* spaces) `sepBy` (many1 eof)
-  many endOfLine
+  many (inlineSpaces >> endOfLine)
+  stmts <- rvStmt `endBy` (many1 $ inlineSpaces >> endOfLine)
+  spaces
+  eof
   return $ Program stmts
 
 prog :: String
-prog = [i||]
+prog = [i|
 
-p :: Program
-p = fromRight $ parse rvProgram "" prog
+
+
+let x = <# json: /home/kj/test.json #>
+let q = <? /servers/server[@id="DS1"] ?>
+
+x ? q := 4
+
+
+
+|]
+
+prog2 :: String
+prog2 = [i|
+x y := 4
+x ? y
+
+
+|]
+
+p :: Either ParseError Program
+p = parse rvProgram "" prog

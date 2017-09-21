@@ -20,6 +20,7 @@ data Expr = ELiteral Literal
 
 
 data Stmt = SLet {- binding -} String {- value -} Expr
+          | SWrite Expr Expr
           | SApp Expr  -- SApp (EApp func value)
           deriving (Eq, Show)
 
