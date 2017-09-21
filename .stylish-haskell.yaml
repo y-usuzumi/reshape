@@ -225,4 +225,5 @@ language_extensions:
   - MultiParamTypeClasses
   - RankNTypes
   - TemplateHaskell
+  - TypeFamilies
   - QuasiQuotes

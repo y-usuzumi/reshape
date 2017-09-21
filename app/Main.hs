@@ -1,6 +1,9 @@
 module Main where
 
-import Language.Reshape.Parser
+import Language.Reshape.Runner
+import System.Environment
 
 main :: IO ()
-main = print p
+main = do
+  files <- getArgs
+  mapM_ runProgramFile files

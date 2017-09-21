@@ -20,16 +20,30 @@ library
                      , Language.Reshape.Interpreter
                      , Language.Reshape.Parser
                      , Language.Reshape.Repl
+                     , Language.Reshape.Runner
+                     , Reshape.Engine.JSON
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , either-unwrap
+                     , exceptions
                      , interpolate
+                     , mtl
                      , parsec
                      , pretty-simple
+                     , transformers
   default-language:    Haskell2010
-  default-extensions:  FlexibleContexts
+  default-extensions:  AllowAmbiguousTypes
+                     , FlexibleContexts
+                     , FlexibleInstances
+                     , FunctionalDependencies
+                     , GADTs
+                     , MultiParamTypeClasses
                      , RankNTypes
+                     , RecordWildCards
                      , QuasiQuotes
+                     , ScopedTypeVariables
+                     , TypeFamilies
+                     , UndecidableInstances
 
 executable reshape
   hs-source-dirs:      app

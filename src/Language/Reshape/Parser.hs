@@ -66,17 +66,17 @@ inlineSpaces1 = skipMany1 (oneOf " \t")
 ----------
 
 rvInteger :: Parser Literal
-rvInteger = VInt <$> int
+rvInteger = LInt <$> int
 
 -- TODO
 rvFloat :: Parser Literal
-rvFloat = VFloat <$> float
+rvFloat = LFloat <$> float
 
 rvString :: Parser Literal
-rvString = VString <$> str
+rvString = LString <$> str
 
 rvList :: Parser Literal
-rvList = VList <$> between (char '[') (char ']') (rvExpr `sepBy` (char ','))
+rvList = LList <$> between (char '[') (char ']') (rvExpr `sepBy` (char ','))
 
 rvSource :: Parser Literal
 rvSource = do
@@ -86,14 +86,14 @@ rvSource = do
   char ':'
   inlineSpaces
   path <- manyTill anyChar (try (inlineSpaces *> (string "#>")))
-  return $ VSource identifier path
+  return $ LSource identifier path
 
 rvQuery :: Parser Literal
 rvQuery = do
   try $ string "<?"
   inlineSpaces
   q <- manyTill anyChar (try (inlineSpaces *> (string "?>")))
-  return $ VQuery $ Query q
+  return $ LQuery q
 
 rvInfixOp :: Parser Literal
 rvInfixOp = let  in do
@@ -103,7 +103,7 @@ rvInfixOp = let  in do
   notFollowedBy $ excludedOp "<?"
   notFollowedBy $ excludedOp "?>"
   notFollowedBy $ excludedOp "|>"
-  VInfixOp <$> many1 (oneOf "!@#$%^&*-+=|./?:<>")
+  LInfixOp <$> many1 (oneOf "!@#$%^&*-+=|./?:<>")
   where
     opChars = "!@#$%^&*-+=|./?:<>"
     excludedOp s = string s >> notFollowedBy (oneOf opChars)
@@ -136,9 +136,9 @@ rvAppCall = do
     foldApp :: [Expr] -> Parser [Expr]
     foldApp [] = return []
     foldApp (a:[]) = return [a]
-    foldApp (op@(ELiteral (VInfixOp _)):a:s) = foldApp $ (EApp op a):s
-    foldApp (a:op@(ELiteral (VInfixOp opS)):[]) = unexpected (printf "Op %s is missing operand(s)" opS)
-    foldApp (a:op@(ELiteral (VInfixOp _)):c:s) = foldApp $ (EApp (EApp op a) c):s
+    foldApp (op@(ELiteral (LInfixOp _)):a:s) = foldApp $ (EApp op a):s
+    foldApp (a:op@(ELiteral (LInfixOp opS)):[]) = unexpected (printf "Op %s is missing operand(s)" opS)
+    foldApp (a:op@(ELiteral (LInfixOp _)):c:s) = foldApp $ (EApp (EApp op a) c):s
     foldApp (a:b:s) = foldApp $ (EApp a b):s
 
 rvEnclosed :: Parser Expr
@@ -203,22 +203,5 @@ rvProgram = do
   eof
   return $ Program stmts
 
-prog :: String
-prog = [i|
-
-
-
-let x = <# json: /home/kj/test.json #>
-let q1 = <? /servers/server[_id="DS1"] ?>
-
-4 |> x ? q1
-
-let y = <# xml: /home/kj/test.xml #>
-let q2 = <? /servers/server[@id="DS1"] ?>
-
-y ? q2 |> x ? q1
-
-|]
-
-p :: Either ParseError Program
-p = parse rvProgram "" prog
+parseProgram :: String -> Either ParseError Program
+parseProgram prog = parse rvProgram "" prog

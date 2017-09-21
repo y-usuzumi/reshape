@@ -1,15 +1,12 @@
 module Language.Reshape.AST where
 
-data Query = Query String
-           deriving (Eq, Show)
-
-data Literal = VInt Integer
-           | VFloat Double
-           | VString String
-           | VList [Expr]
-           | VSource String String
-           | VQuery Query
-           | VInfixOp String
+data Literal = LInt Integer
+           | LFloat Double
+           | LString String
+           | LList [Expr]
+           | LSource String String
+           | LQuery String
+           | LInfixOp String
            deriving (Eq, Show)
 
 
