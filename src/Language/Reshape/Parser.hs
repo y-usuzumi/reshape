@@ -102,7 +102,7 @@ rvInfixOp = let  in do
   notFollowedBy $ excludedOp "#>"
   notFollowedBy $ excludedOp "<?"
   notFollowedBy $ excludedOp "?>"
-  notFollowedBy $ excludedOp ":="
+  notFollowedBy $ excludedOp "|>"
   VInfixOp <$> many1 (oneOf "!@#$%^&*-+=|./?:<>")
   where
     opChars = "!@#$%^&*-+=|./?:<>"
@@ -176,20 +176,19 @@ rvBind = do
 
 rvWrite :: Parser Stmt
 rvWrite = do
-  writee <- rvExpr
-  inlineSpaces
-  string ":="
-  inlineSpaces
   writer <- rvExpr
-  return $ SWrite writee writer
+  inlineSpaces
+  string "|>"
+  inlineSpaces
+  writee <- rvExpr
+  return $ SWrite writer writee
 
-rvAppStmt :: Parser Stmt
-rvAppStmt = SApp <$> rvExpr
+-- rvAppStmt :: Parser Stmt
+-- rvAppStmt = SApp <$> rvAppCall
 
 rvStmt :: Parser Stmt
 rvStmt = rvBind
   <|> try rvWrite
-  <|> rvAppStmt
 
 
 ----------
@@ -210,19 +209,14 @@ prog = [i|
 
 
 let x = <# json: /home/kj/test.json #>
-let q = <? /servers/server[@id="DS1"] ?>
+let q1 = <? /servers/server[_id="DS1"] ?>
 
-x ? q := 4
+4 |> x ? q1
 
+let y = <# xml: /home/kj/test.xml #>
+let q2 = <? /servers/server[@id="DS1"] ?>
 
-
-|]
-
-prog2 :: String
-prog2 = [i|
-x y := 4
-x ? y
-
+y ? q2 |> x ? q1
 
 |]
 
