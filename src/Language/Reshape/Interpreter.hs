@@ -6,7 +6,6 @@ import           Control.Monad.IO.Class
 import           Control.Monad.State
 import           Data.List
 import qualified Data.Map                  as M
-import           Debug.Trace
 import           Language.Reshape.AST      as AST
 import           Language.Reshape.DataType
 import qualified Reshape.Engine.JSON
@@ -49,7 +48,8 @@ evalLiteral scope (LList l)  = VList <$> (sequenceA $ fmap (eval scope) l)
 evalLiteral _ (LSource sourceType sourcePath) = loadValue sourceType sourcePath
 evalLiteral _ (LQuery q) = return $ VQuery q
 evalLiteral scope (LInfixOp op) = case op of
-  "?" -> return $ VFunc execQuery
+  "?" -> evalVar scope "__query__"
+  "+" -> evalVar scope "__add__"
 
 evalVar :: Scope -> String -> IO Value
 evalVar scope s = case s `M.lookup` scope of
@@ -71,7 +71,6 @@ eval scope (EApp l r)         = evalApp scope l r
 
 exec :: AST.Stmt -> StateT Scope IO ()
 exec (SLet s expr) = do
-  return $ trace s ()
   scope <- get
   value <- lift $ eval scope expr
   bindValue s value
@@ -99,18 +98,21 @@ run (Program stmts) = void $ runStateT (execStmts stmts) initialScope
 ---------------------
 
 functions :: [(String, Value -> IO Value)]
-functions = [ ( "echo", echoFunc)
+functions = [ ("echo", echoFunc)
+            , ("__add__", infixAddFunc)
+            , ("__query__", execQuery)
             ]
   where
-    echoFunc (VInt int) = print int >> return VNull
+    echoFunc (VInt int) = print int >> putStrLn "" >> return VNull
     echoFunc (VString s) = putStrLn s >> return VNull
+    infixAddFunc (VInt l) = return $ VFunc $ \(VInt r) -> return (VInt (l + r))
+    execQuery :: Value -> IO Value
+    execQuery (VReshapeModel v) = return $ VFunc (execQuery2 v)
+      where
+        execQuery2 (JSONValue context) (VQuery s) = return $ (VReshapeModel $ JSONValue $ query context s)
+        execQuery v
+          | t <- getType v = throwM $ TypeError t TReshapeModel
 
 initialScope :: M.Map String Value
 initialScope = M.fromList (map (second VFunc) functions)
 
-execQuery :: Value -> IO Value
-execQuery (VReshapeModel v) = return $ VFunc (execQuery2 v)
-  where
-    execQuery2 (JSONValue context) (VQuery s) = return $ (VReshapeModel $ JSONValue $ query context s)
-execQuery v
-  | t <- getType v = throwM $ TypeError t TReshapeModel

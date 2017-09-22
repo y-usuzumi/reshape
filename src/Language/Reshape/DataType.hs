@@ -44,5 +44,5 @@ class ReshapeQueryableModel context where
 instance ReshapeQueryableModel JSON.JSONQueryContext where
   load = return . JSON.load
   query = JSON.query
-  write (VString s) c = liftIO $ printf "Writing %s to %s" s (JSON.source c)
-  write (VInt i) c = liftIO $ printf "Writing %d to %s" i (JSON.source c)
+  write (VString s) c = liftIO $ printf "Writing %s to %s\n" s (JSON.source c)
+  write (VInt i) c = liftIO $ printf "Writing %d to %s\n" i (JSON.source c)

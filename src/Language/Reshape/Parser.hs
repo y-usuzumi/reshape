@@ -171,7 +171,7 @@ rvBind = do
   inlineSpaces
   char '='
   inlineSpaces
-  expr <- rvELiteral
+  expr <- rvExpr
   return $ SLet binding expr
 
 rvWrite :: Parser Stmt
