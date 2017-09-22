@@ -83,7 +83,7 @@ exec (SWrite l r) = do
   writer <- lift $ eval scope l
   writee <- lift $ eval scope r
   lift $ writeValue writer writee
-exec (SApp expr) = do
+exec (SExprStmt expr) = do
   scope <- get
   lift $ void $ eval scope expr
 
@@ -103,6 +103,7 @@ functions = [ ( "echo", echoFunc)
             ]
   where
     echoFunc (VInt int) = print int >> return VNull
+    echoFunc (VString s) = putStrLn s >> return VNull
 
 initialScope :: M.Map String Value
 initialScope = M.fromList (map (second VFunc) functions)

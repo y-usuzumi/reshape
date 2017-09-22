@@ -183,12 +183,13 @@ rvWrite = do
   writee <- rvExpr
   return $ SWrite writer writee
 
--- rvAppStmt :: Parser Stmt
--- rvAppStmt = SApp <$> rvAppCall
+rvExprStmt :: Parser Stmt
+rvExprStmt = SExprStmt <$> rvExpr
 
 rvStmt :: Parser Stmt
 rvStmt = rvBind
   <|> try rvWrite
+  <|> rvExprStmt
 
 
 ----------
