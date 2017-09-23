@@ -103,7 +103,7 @@ functions = [ ("echo", echoFunc)
             , ("__query__", execQuery)
             ]
   where
-    echoFunc (VInt int) = print int >> putStrLn "" >> return VNull
+    echoFunc (VInt int) = print int >> return VNull
     echoFunc (VString s) = putStrLn s >> return VNull
     infixAddFunc (VInt l) = return $ VFunc $ \(VInt r) -> return (VInt (l + r))
     execQuery :: Value -> IO Value
