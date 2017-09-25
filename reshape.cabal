@@ -18,9 +18,11 @@ library
   exposed-modules:     Language.Reshape.AST
                      , Language.Reshape.DataType
                      , Language.Reshape.Interpreter
+                     , Language.Reshape.Lexer
                      , Language.Reshape.Parser
                      , Language.Reshape.Repl
                      , Language.Reshape.Runner
+                     , Language.Reshape.Token
                      , Reshape.Engine.JSON
   build-depends:       base >= 4.7 && < 5
                      , containers

@@ -8,121 +8,69 @@ import           Data.List
 import           Data.String.Interpolate
 import           Debug.Trace
 import           Language.Reshape.AST
+import           Language.Reshape.Lexer
+import           Language.Reshape.Token
 import           Text.Parsec
 import           Text.Printf
 
-type Parser t = forall s u m. Stream s m Char => ParsecT s u m t
+type Parser t = forall s u m. Stream s m Token => ParsecT s u m t
 
 -------
 -- Prim
 -------
 
-positiveInteger :: Parser Integer
-positiveInteger = foldl' (\a i -> a * 10 + fromIntegral (digitToInt i)) 0 <$> many1 digit
-
-negativeInteger :: Parser Integer
-negativeInteger = char '-' *> positiveInteger >>= return . negate
-
-int :: Parser Integer
-int = try $ positiveInteger <|> negativeInteger
-
--- TODO
-float :: Parser Double
-float = undefined
-
-escape :: Parser String
-escape = do
-    d <- char '\\'
-    c <- oneOf "\\\"0nrvtbf" -- all the characters which can be escaped
-    return [d, c]
-
-nonEscape :: Parser Char
-nonEscape = noneOf "\\\"\0\n\r\v\t\b\f"
-
-character :: Parser String
-character = fmap return nonEscape <|> escape
-
-str :: Parser String
-str = do
-    char '"'
-    strings <- many character
-    char '"'
-    return $ concat strings
-
-ident :: Parser String
-ident = do
-  l <- char '_' <|> letter
-  r <- many $ char '_' <|> alphaNum
-  return (l:r)
-
-inlineSpaces :: Parser ()
-inlineSpaces = skipMany (oneOf " \t")
-
-inlineSpaces1 :: Parser ()
-inlineSpaces1 = skipMany1 (oneOf " \t")
+satisfy :: (Show t, Eq t, Stream s m t) => (t -> Bool) -> ParsecT s u m t
+satisfy = tokenPrim (\c -> show [c])
+          (\pos c _cs -> updatePosChar pos c)
+          (\c -> if f c then Just c else Nothing)
 
 ----------
 -- Literal
 ----------
 
-rvInteger :: Parser Literal
-rvInteger = LInt <$> int
+pInt :: Parser Literal
+pInt = do
+  TInt i <- satisfy isTInt
+  return $ EInt i
 
--- TODO
-rvFloat :: Parser Literal
-rvFloat = LFloat <$> float
+pFloat :: Parser Literal
+pFloat = do
+  TFloat f <- satisfy isTFloat
+  return $ EFloat f
 
-rvString :: Parser Literal
-rvString = LString <$> str
+pString :: Parser Literal
+pString = do
+  TString s <- satisfy isTString
+  return $ EString s
 
-rvList :: Parser Literal
-rvList = LList <$> between (char '[') (char ']') (rvExpr `sepBy` (char ','))
+pSource :: Parser Literal
+pSource = do
+  (TSource f) <- tSource
+  return $ LSource f
 
-rvSource :: Parser Literal
-rvSource = do
-  try $ string "<#"
-  inlineSpaces
-  identifier <- ident
-  char ':'
-  inlineSpaces
-  path <- manyTill anyChar (try (inlineSpaces *> (string "#>")))
-  return $ LSource identifier path
+pQuery :: Parser Literal
+pQuery = do
+  (TQuery f) <- tQuery
+  return $ LQuery f
 
-rvQuery :: Parser Literal
-rvQuery = do
-  try $ string "<?"
-  inlineSpaces
-  q <- manyTill anyChar (try (inlineSpaces *> (string "?>")))
-  return $ LQuery q
+pInfixOp :: Parser Literal
+pInfixOp = do
+  (TInfixOp f) <- tInfixop
+  return $ LInfixOp f
 
-rvInfixOp :: Parser Literal
-rvInfixOp = let  in do
-  notFollowedBy $ excludedOp "="
-  notFollowedBy $ excludedOp "<#"
-  notFollowedBy $ excludedOp "#>"
-  notFollowedBy $ excludedOp "<?"
-  notFollowedBy $ excludedOp "?>"
-  notFollowedBy $ excludedOp "|>"
-  LInfixOp <$> many1 (oneOf "!@#$%^&*-+=|./?:<>")
-  where
-    opChars = "!@#$%^&*-+=|./?:<>"
-    excludedOp s = string s >> notFollowedBy (oneOf opChars)
-
-rvLiteral :: Parser Literal
-rvLiteral = (rvInteger
-  -- <|> rvFloat
-  <|> rvString
-  <|> rvList
-  <|> rvInfixOp
-  <|> rvSource
-  <|> rvQuery)
+pList :: Parser Literal
+pList = do
+  void $ tLSB
+  exprs <- pExpr `sepBy` tComma
+  void $ tRSB
+  return $ LList exprs
 
 -------
 -- Expr
 -------
 
-rvELiteral :: Parser Expr
-rvELiteral = ELiteral <$> rvLiteral
+pELiteral :: Parser Expr
+pELiteral = ELiteral <$> pLiteral
 
 rvVar :: Parser Expr
 rvVar = EVar <$> ident
