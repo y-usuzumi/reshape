@@ -13,7 +13,7 @@ import           Language.Reshape.Token
 import           Text.Parsec
 import           Text.Printf
 
-type Parser t = forall s u m. Stream s m Token => ParsecT s u m t
+type Parser = Parsec Void String
 
 -------
 -- Prim
