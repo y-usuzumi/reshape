@@ -10,9 +10,8 @@ import           Data.String.Interpolate
 import           Data.Void
 import           Debug.Trace
 import           Language.Reshape.Token
-import           Text.Megaparsec         hiding (Token, token)
-import           Text.Megaparsec         hiding (Token)
-import           Text.Megaparsec.Lexer   as L
+import           Text.Megaparsec         hiding (Token, token, space)
+import qualified          Text.Megaparsec.Lexer   as L
 import           Text.Printf
 
 type Lexer = Parsec Void String
@@ -31,17 +30,23 @@ ident = do
   r <- many $ char '_' <|> alphaNumChar
   return (l:r)
 
-inlineSpaces :: Lexer ()
-inlineSpaces = skipMany (oneOf " \t")
-
-inlineSpaces1 :: Lexer ()
-inlineSpaces1 = skipSome (oneOf " \t")
+inlineSpaceChar :: Lexer Char
+inlineSpaceChar = oneOf " \t"
 
 lineComment :: Lexer ()
-lineComment = skipLineComment "//"
+lineComment = L.skipLineComment "//"
 
 blockComment :: Lexer ()
-blockComment = skipBlockComment "/*" "*/"
+blockComment = L.skipBlockComment "/*" "*/"
+
+space :: Lexer ()
+space = L.space (void spaceChar) lineComment blockComment
+
+iSpace :: Lexer ()
+iSpace = L.space (void inlineSpaceChar) lineComment blockComment
+
+symbol :: String -> Lexer String
+symbol = L.symbol space
 
 ---------
 -- Tokens
@@ -66,7 +71,7 @@ tInt :: Lexer Token
 tInt = TInt <$> L.integer
 
 tFloat :: Lexer Token
-tFloat = TFloat <$> float
+tFloat = TFloat <$> L.float
 
 tString :: Lexer Token
 tString = TString <$> str
